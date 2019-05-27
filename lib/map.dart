@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:modal_progress_hud/modal_progress_hud.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geocoder/geocoder.dart';
 
 
 
@@ -26,52 +27,23 @@ class MapState extends State<MapApp>{
 
   bool pressed = false;
   bool _saving = false;
+  bool showImage = false;
+  bool showAddress = false;
 
   List _reasons = ['Pot Hole', 'Defective House', 'Open Man Hole'];
-
-  List<DropdownMenuItem<String>> _dropMenuItems;
-  String _default;
+  List<DropdownMenuItem<String>> _categories;
+  List<Address>_addresses;
+  String _selectedCategory;
+  String _selectedAddress;
   File _image;
 
   @override
   void initState() {
-    _dropMenuItems = getMenuItems();
+    _categories = getCategoryItems();
     super.initState();
+    getAddresses();
   }
 
-  List<DropdownMenuItem<String>> getMenuItems(){
-    List<DropdownMenuItem<String>> items = new List();
-    for(String reason in _reasons){
-      items.add(new DropdownMenuItem(
-          value: reason,
-          child: new Text(reason)
-      )
-      );
-    }
-
-    return items;
-  }
-
-
-  CameraPosition getCameraPosition(){
-    return CameraPosition(
-      zoom: 16.0,
-      target: LatLng(widget.latitude, widget.longitude)
-    );
-  }
-
-  void _onMapCreated(GoogleMapController controller) {
-    _controller.complete(controller);
-    final Marker marker = Marker(
-      markerId: markerId,
-      position: LatLng(widget.latitude, widget.longitude),
-      infoWindow: InfoWindow(title: "You are here", snippet: '*')
-    );
-    setState(() {
-      // adding a new marker to map
-      markers[markerId] = marker;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +110,7 @@ class MapState extends State<MapApp>{
                   ),
                   SizedBox(height: 20.0,),
                   new TextField(
-                    maxLines: 10,
+                    maxLines: 5,
                     keyboardType: TextInputType.multiline,
                     decoration: InputDecoration(
                         border: OutlineInputBorder(borderSide: BorderSide(style: BorderStyle.solid)),
@@ -148,43 +120,78 @@ class MapState extends State<MapApp>{
                   SizedBox(height: 20.0,),
                   new DropdownButton(
                     isExpanded: true,
-                    value: _default,
-                    items: _dropMenuItems,
-                    onChanged: changedDropDownItem,
+                    value: _selectedCategory,
+                    items: _categories,
+                    onChanged: changeSelectedCategory,
                     hint: Text('SELECT Category'),
 
                   ),
                   SizedBox(height: 20.0,),
+                  new DropdownButton(
+                    hint: new Text('Please select the closest Address'),
+                    isExpanded: true,
+                    items: _addresses.map((addy){
+                      return new DropdownMenuItem(
+                        child: new Text(addy.addressLine),
+                        value: addy.addressLine
+                      );
+                    }).toList(),
+                    onChanged: getSelectedAddress,
+                    value: _selectedAddress,
+                  ),
+                  SizedBox(height: 20.0,),
+                  new TextFormField(
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                        hintText: 'Your phone number'
+                    ),
+                  ),
+                  SizedBox(height: 12.0,),
                   new Row(
                     children: <Widget>[
                       Expanded(
-                        child:  new TextFormField(
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                              hintText: 'Your phone number'
-                          ),
-                        ),
+                        child: showImage ? imageThumbNail() : SizedBox(height: 2.0,),
                       ),
                       new FloatingActionButton(
-                          child: Icon(Icons.add_a_photo),
-                          tooltip: 'Pick Image',
-                          onPressed: _optionsDialogBox,
-                        ),
+                        child: Icon(Icons.add_a_photo),
+                        tooltip: 'Pick Image',
+                        onPressed: _optionsDialogBox,
+                      ),
                     ],
                   ),
                   SizedBox(height: 12.0,),
-                  new Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
-                    child: RaisedButton(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(24)
+                  new Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: new Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16.0),
+                          child: RaisedButton(
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24)
+                            ),
+                            onPressed: submit,
+                            padding: EdgeInsets.all(12),
+                            color: Colors.green[900],
+                            child: Text('Report', style: TextStyle(color: Colors.white),),
+                          ),
+                        ),
                       ),
-                      onPressed: submit,
-                      padding: EdgeInsets.all(12),
-                      color: Colors.redAccent,
-                      child: Text('Report', style: TextStyle(color: Colors.white),),
-                    ),
-                  )
+                      Expanded(
+                        child: new Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16.0),
+                          child: RaisedButton(
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24)
+                            ),
+                            onPressed: cancel,
+                            padding: EdgeInsets.all(12),
+                            color: Colors.redAccent,
+                            child: Text('Cancel', style: TextStyle(color: Colors.white),),
+                          ),
+                        ),
+                      )
+                    ],
+                  ),
                 ]
             )
         ),
@@ -192,11 +199,29 @@ class MapState extends State<MapApp>{
     );
   }
 
+  Widget imageThumbNail(){
+    return new Container(
+      width: 720.0,
+      height: 65.0,
+      child: Image.file(
+        _image,
+        fit: BoxFit.fitWidth,
+      ),
+    );
+  }
 
-  void changedDropDownItem(String selectedItem) {
+  // Get selected Category
+  void changeSelectedCategory(String selectedItem) {
     print("Selected city $selectedItem, we are going to refresh the UI");
     setState(() {
-      _default = selectedItem;
+      _selectedCategory = selectedItem;
+    });
+  }
+
+  // Get selected Address
+  void getSelectedAddress(String selectedItem){
+    setState(() {
+      _selectedAddress = selectedItem;
     });
   }
 
@@ -208,9 +233,11 @@ class MapState extends State<MapApp>{
       _image = image;
       print(_image.path);
       Navigator.of(context).pop();
+      showImage = true;
     });
   }
 
+  // Handle selecting picture from Gallery
   Future openGallery() async{
     var image = await ImagePicker.pickImage(source: ImageSource.gallery);
 
@@ -218,9 +245,11 @@ class MapState extends State<MapApp>{
       _image = image;
       print(_image.path);
       Navigator.of(context).pop();
+      showImage = true;
     });
   }
 
+  // Dialog box for either taking a picture or selecting from gallery
   Future<void> _optionsDialogBox(){
     return showDialog(context: context,
       builder: (BuildContext context){
@@ -247,9 +276,22 @@ class MapState extends State<MapApp>{
     );
   }
 
+  // Get addresses from latitude and longitude
+  getAddresses () async{
+    final coordinates = new Coordinates(widget.latitude, widget.longitude);
+    var addresses = await Geocoder.local.findAddressesFromCoordinates(coordinates);
+    if (addresses != null){
+      setState(() {
+        _addresses = addresses;
+        showAddress = true;
+      });
+    }
+  }
+
+
+  // Submit report
   void submit(){
     setState(() {
-
       _saving = true;
     });
 
@@ -263,6 +305,49 @@ class MapState extends State<MapApp>{
       });
     });
 
+  }
+
+  // Cancel
+  void cancel(){
+    setState(() {
+      pressed = false;
+      showImage = false;
+    });
+  }
+
+  // Prep category for drop down box
+  List<DropdownMenuItem<String>> getCategoryItems(){
+    List<DropdownMenuItem<String>> items = new List();
+    for(String reason in _reasons){
+      items.add(new DropdownMenuItem(
+          value: reason,
+          child: new Text(reason)
+      )
+      );
+    }
+
+    return items;
+  }
+
+
+  CameraPosition getCameraPosition(){
+    return CameraPosition(
+        zoom: 16.0,
+        target: LatLng(widget.latitude, widget.longitude)
+    );
+  }
+
+  void _onMapCreated(GoogleMapController controller) {
+    _controller.complete(controller);
+    final Marker marker = Marker(
+        markerId: markerId,
+        position: LatLng(widget.latitude, widget.longitude),
+        infoWindow: InfoWindow(title: "You are here", snippet: '*')
+    );
+    setState(() {
+      // adding a new marker to map
+      markers[markerId] = marker;
+    });
   }
 
 
