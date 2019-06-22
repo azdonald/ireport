@@ -7,6 +7,7 @@ import 'package:modal_progress_hud/modal_progress_hud.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geocoder/geocoder.dart';
+import 'package:ireport/api.dart';
 
 
 
@@ -24,6 +25,8 @@ class MapState extends State<MapApp>{
   Completer<GoogleMapController> _controller = Completer();
   Map<MarkerId, Marker> markers = <MarkerId, Marker>{};
   MarkerId markerId = MarkerId("qwertyuiop");
+  final titleController = TextEditingController();
+  final descriptionController = TextEditingController();
 
   bool pressed = false;
   bool _saving = false;
@@ -103,6 +106,7 @@ class MapState extends State<MapApp>{
                 children: <Widget>[
                   new TextFormField(
                     obscureText: false,
+                    controller: titleController,
                     decoration: InputDecoration(
                       hintText: "Provide a title"
                     ),
@@ -112,6 +116,7 @@ class MapState extends State<MapApp>{
                   new TextField(
                     maxLines: 5,
                     keyboardType: TextInputType.multiline,
+                    controller: descriptionController,
                     decoration: InputDecoration(
                         border: OutlineInputBorder(borderSide: BorderSide(style: BorderStyle.solid)),
                         hintText: 'Please enter a description of the problem'
@@ -290,20 +295,21 @@ class MapState extends State<MapApp>{
 
 
   // Submit report
-  void submit(){
+  void submit() async{
     setState(() {
       _saving = true;
     });
 
     //Simulate a service call
     print('submitting to backend...');
-    new Future.delayed(new Duration(seconds: 4), () {
-      Fluttertoast.showToast(msg: "Thanks for your report", toastLength: Toast.LENGTH_LONG);
+    
+    var message = await sendData(titleController.text, descriptionController.text, _selectedCategory, widget.latitude, widget.longitude);
+
+      Fluttertoast.showToast(msg: message, toastLength: Toast.LENGTH_LONG);
       setState(() {
         _saving = false;
         pressed = false;
       });
-    });
 
   }
 
